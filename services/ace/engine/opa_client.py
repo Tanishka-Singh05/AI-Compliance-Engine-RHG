@@ -1,5 +1,6 @@
-from typing import Any
 import json
+from typing import Any
+
 import httpx
 
 OPA_V1_SET_KEYS = {"allow", "deny", "patch"}

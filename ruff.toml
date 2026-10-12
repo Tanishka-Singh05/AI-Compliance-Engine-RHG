@@ -1,0 +1,8 @@
+# Deterministic Ruff configuration.
+#
+# CI and pre-commit must agree on the enforced rule set. Keep `select` explicit
+# so it does not drift with the Ruff release, and keep the pinned Ruff version
+# in sync across .pre-commit-config.yaml, requirements-dev.txt, and ci.yml.
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I"]

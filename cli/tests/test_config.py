@@ -1,5 +1,4 @@
 import pytest
-
 from ace_compliance.config import (
     ACE_LOCAL_URL,
     RHG_LOCAL_URL,

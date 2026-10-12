@@ -45,7 +45,7 @@ jobs:
             cli/pyproject.toml
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install "ruff==0.6.9"
 
       - name: Run ruff check
         run: ruff check services/ cli/

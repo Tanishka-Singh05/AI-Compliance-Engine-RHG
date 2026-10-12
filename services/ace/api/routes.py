@@ -9,7 +9,12 @@ from pydantic import BaseModel
 
 from ace.api.websocket import publish_event
 from ace.engine.opa_client import OPAClient
-from ace.metrics.prometheus import ACTIVE_SCANS, COMPLIANCE_SCORE, OPA_HEALTH, track_scan
+from ace.metrics.prometheus import (
+    ACTIVE_SCANS,
+    COMPLIANCE_SCORE,
+    OPA_HEALTH,
+    track_scan,
+)
 from ace.notifier.mutation_notifier import MutationEvent, MutationNotifier
 from ace.parsers.docker_compose import DockerComposeParser
 from ace.parsers.dockerfile import DockerfileParser

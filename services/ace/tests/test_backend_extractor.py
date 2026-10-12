@@ -1,6 +1,6 @@
 import base64
 
-from ace.backend_scanner.extractor import BackendExtractor, ENV_FILENAME_PATTERN
+from ace.backend_scanner.extractor import ENV_FILENAME_PATTERN, BackendExtractor
 
 
 def b64(s: str) -> str:

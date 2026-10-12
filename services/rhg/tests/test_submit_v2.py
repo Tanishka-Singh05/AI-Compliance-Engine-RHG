@@ -1,9 +1,9 @@
 import base64
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import AsyncMock
 
 from rhg.api.routes import get_ace_client
 from rhg.main import app
