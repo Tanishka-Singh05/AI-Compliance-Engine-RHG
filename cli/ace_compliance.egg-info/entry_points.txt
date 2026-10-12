@@ -1,2 +1,0 @@
-[console_scripts]
-ace = ace_compliance.cli:cli

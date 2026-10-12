@@ -137,6 +137,9 @@ jobs:
       - name: Install build tools
         run: pip install build twine
 
+      - name: Clean stale build output
+        run: rm -rf cli/dist cli/build cli/*.egg-info
+
       - name: Build CLI package
         run: python -m build cli/
 
