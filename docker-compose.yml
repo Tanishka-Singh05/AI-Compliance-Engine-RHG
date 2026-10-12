@@ -62,6 +62,8 @@ services:
       BLOCK_ON_SEVERITY: HIGH
       MAX_MUTATION_RETRIES: "3"
       REDIS_URL: redis://redis:6379
+      RHG_METRICS_PORT: "9091"
+      RHG_METRICS_ENABLED: "true"
       DASHBOARD_URL: http://dashboard:3000
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       SQS_ALERT_QUEUE_URL: https://sqs.ap-south-1.amazonaws.com/123/ace-alerts.fifo
@@ -70,3 +72,37 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - ace
+      - rhg
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:
