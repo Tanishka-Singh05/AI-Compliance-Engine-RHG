@@ -207,5 +207,7 @@ class TestAgentEndpoint:
         assert resp.status_code == 503
 
     async def test_agent_route_is_registered_on_the_app(self):
-        paths = {route.path for route in app.routes}
+        # app.routes may hold router wrappers without `.path` on some FastAPI
+        # versions; the OpenAPI schema is the stable, resolved view of paths.
+        paths = set(app.openapi()["paths"])
         assert "/ace/agent" in paths
