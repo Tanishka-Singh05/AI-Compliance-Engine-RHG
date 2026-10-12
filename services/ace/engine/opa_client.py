@@ -1,5 +1,5 @@
 from typing import Any
-
+import json
 import httpx
 
 OPA_V1_SET_KEYS = {"allow", "deny", "patch"}
@@ -10,7 +10,6 @@ def _unwrap_set(data: dict) -> list:
         items = []
         for k in data:
             try:
-                import json
                 items.append(json.loads(k))
             except (json.JSONDecodeError, TypeError):
                 items.append(k)
