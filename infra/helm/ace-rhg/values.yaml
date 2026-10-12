@@ -14,6 +14,10 @@ image:
 imagePullSecrets: []
 
 opa:
+  # Deploy an in-cluster OPA server. Set enabled:false and externalUrl to point
+  # ACE at a shared/remote OPA hosted elsewhere (e.g. http://opa.internal:8181).
+  enabled: true
+  externalUrl: ""
   image:
     repository: openpolicyagent/opa
     tag: "0.63.0"

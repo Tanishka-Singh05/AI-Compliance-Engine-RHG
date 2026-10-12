@@ -1,4 +1,4 @@
-{{- if not .Values.policies.existingConfigMap }}
+{{- if and (not .Values.policies.existingConfigMap) .Values.opa.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

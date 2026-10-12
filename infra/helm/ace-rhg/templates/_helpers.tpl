@@ -74,7 +74,11 @@ Name of the ConfigMap holding Rego policies.
 Fully qualified in-cluster URLs.
 */}}
 {{- define "ace-rhg.opaUrl" -}}
-{{- printf "http://%s-opa:8181" (include "ace-rhg.fullname" .) }}
+{{- if .Values.opa.externalUrl -}}
+{{- .Values.opa.externalUrl -}}
+{{- else -}}
+{{- printf "http://%s-opa:8181" (include "ace-rhg.fullname" .) -}}
+{{- end -}}
 {{- end }}
 
 {{- define "ace-rhg.redisUrl" -}}

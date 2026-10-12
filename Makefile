@@ -18,7 +18,7 @@ HELM_ARGS ?=
 .PHONY: help install test test-ace test-rhg test-cli test-opa coverage \
 	lint format scan build publish-test up down logs rebuild ps \
 	helm-lint helm-template helm-install helm-uninstall image-service \
-	image-lambda deploy-aws deploy-aws-fast clean
+	image-lambda clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -110,14 +110,6 @@ helm-install: ## Install/upgrade the chart, bundling the repo's Rego policies
 
 helm-uninstall: ## Uninstall the chart
 	helm uninstall ace-rhg $(HELM_ARGS)
-
-# --- AWS -------------------------------------------------------------------
-
-deploy-aws: ## Build, push, and deploy the AWS Lambda stack (scan + dispatcher)
-	bash scripts/deploy_aws.sh
-
-deploy-aws-fast: ## Deploy without rebuilding the image (uses the local image)
-	bash scripts/deploy_aws.sh --skip-build
 
 # --- Housekeeping ----------------------------------------------------------
 

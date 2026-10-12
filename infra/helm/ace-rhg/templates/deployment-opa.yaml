@@ -1,3 +1,4 @@
+{{- if .Values.opa.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,3 +51,4 @@ spec:
         - name: policies
           configMap:
             name: {{ include "ace-rhg.policiesName" . }}
+{{- end }}

@@ -325,11 +325,11 @@ API Gateway v2 (HTTP API)
   │
   │  Lambda Proxy
   ▼
-Lambda: ace-scan-dev (FastAPI + OPA + Mangum)
+Lambda: ace-scan-dev (FastAPI + Mangum)
   │
-  │  evaluates against
+  │  OPA_URL (remote)
   ▼
-OPA Policy Engine (bundled in container)
+OPA Policy Engine (shared/remote service)
 ```
 
 **AWS Resources:**
@@ -337,8 +337,27 @@ OPA Policy Engine (bundled in container)
 | Resource | Endpoint / ARN |
 |---|---|
 | API Gateway | `https://fw6mh9jzpc.execute-api.ap-south-1.amazonaws.com` |
-| Lambda | `arn:aws:lambda:ap-south-1:574772738717:function:ace-scan-dev` |
-| ECR | `574772738717.dkr.ecr.ap-south-1.amazonaws.com/ace-rhg-dev` |
+| Scan Lambda | `arn:aws:lambda:ap-south-1:574772738717:function:ace-scan-dev` |
+| Dispatcher Lambda | `arn:aws:lambda:ap-south-1:574772738717:function:ace-dispatcher-dev` |
+| Alerts queue | `arn:aws:sqs:ap-south-1:574772738717:ace-alerts-dev.fifo` |
+| ECR | `574772738717.dkr.ecr.ap-south-1.amazonaws.com/ace-rhg-dev:latest` |
+| OPA | ECS Fargate service `ace-opa-dev` (public IP) — via `OPA_URL` |
+
+**Deploy / update:**
+
+The scan and dispatcher Lambdas are built from `infra/docker/Dockerfile.lambda`
+and pushed to ECR `ace-rhg-dev:latest`. OPA runs as a standalone ECS Fargate
+service (`ace-opa-dev`, 0.25 vCPU / 512 MB, public subnet + public IP, no ALB/NAT)
+provisioned with the AWS CLI; its image (OPA + the repo's Rego bundles) lives in
+ECR `ace-opa-dev:latest`. The scan Lambda calls OPA over the network via its
+`OPA_URL` env var — no OPA runs inside the Lambda.
+
+Because the Fargate task has no load balancer, its public IP is ephemeral; after a
+task restart, read the new IP (`aws ecs describe-tasks` →
+`aws ec2 describe-network-interfaces`) and update `ace-scan-dev`'s `OPA_URL`. The
+dispatcher overrides `ImageConfig.Command` to
+`handlers.alert_dispatcher_handler.handler` and consumes `ace-alerts-dev.fifo`.
+See `infra/docker/Dockerfile.*` and `infra/aws_lambda/`.
 
 **API Endpoints:**
 
@@ -500,12 +519,10 @@ ace-rhg/
 ├── DEVELOPMENT.md           ← Phase/build status report
 ├── LICENSE                  ← MIT
 ├── Makefile                 ← install / test / lint / build / up / helm targets
-├── Dockerfile               ← Lambda container image (FastAPI + OPA + Mangum)
-├── docker-compose.yml       ← Local dev stack
+├── Dockerfile               ← Lambda container image (FastAPI + Mangum)
+├── docker-compose.yml       ← Local dev stack (ace, rhg, opa, redis, prometheus, grafana)
 ├── .pre-commit-config.yaml  ← ruff, yaml/json checks, OPA + ACE hooks
 ├── requirements-dev.txt     ← Dev + service dependencies
-├── entrypoint.sh            ← Docker entrypoint (local)
-├── entrypoint.py            ← Python entrypoint (alternative)
 │
 ├── services/
 │   ├── ace/                 ← AI Compliance Engine
@@ -518,13 +535,13 @@ ace-rhg/
 │   │   ├── scoring/         ← Risk scorer
 │   │   ├── alerts/          ← Slack, SQS, alert router
 │   │   ├── mcp/             ← MCP server and tool registry
-│   │   └── tests/           ← 243 tests
+│   │   └── tests/           ← 245 tests
 │   │
 │   └── rhg/                 ← Release Hardening Gate
 │       ├── api/
 │       ├── gate/            ← Policy evaluator
 │       ├── mutator/         ← Re-export shim → ace.mutator.patch_engine
-│       └── tests/           ← 49 tests
+│       └── tests/           ← 50 tests
 │
 ├── policies/                ← OPA Rego bundles
 │   ├── cis-kubernetes/
@@ -574,7 +591,7 @@ pytest services/rhg/tests/ -v                     # RHG gate + mutator
 pytest cli/tests/ -v                              # CLI
 ```
 
-**321 tests passing** (ACE 243 · RHG 49 · CLI 29)
+**326 tests passing** (ACE 245 · RHG 50 · CLI 29 · Lambda handlers 2)
 
 ---
 

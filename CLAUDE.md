@@ -144,10 +144,34 @@ Redis `6390`, Prometheus `9090`, Grafana `3000`.
 - Metrics registry is shared: RHG imports `ace.metrics.prometheus`, so unlabeled
   ACE gauges also appear (at `0`) on the RHG scrape target.
 
+## AWS deployment
+
+Files backing the cloud stack (account `574772738717`, region `ap-south-1`):
+
+| File | Purpose |
+|---|---|
+| `infra/docker/Dockerfile.lambda` | Lambda image: bundles code as `./ace/` + policies as `./ace/policies/`, x86_64 |
+| `infra/aws_lambda/handlers/alert_dispatcher_handler.py` | SQS → Slack dispatcher (`ace-dispatcher-dev`) |
+
+- OPA runs as a **standalone ECS Fargate service** (`ace-opa-dev`, 0.25 vCPU /
+  512 MB, public subnet + public IP, **no ALB/NAT**). It is provisioned ad-hoc
+  with the AWS CLI (no Terraform in the repo). The image (OPA + baked Rego
+  bundles) lives in ECR `ace-opa-dev:latest`.
+- Scan function `ace-scan-dev` runs `ace.lambda_handler.handler` and calls OPA at
+  the `OPA_URL` env var. OPA is **not** bundled or started inside the Lambda;
+  OPA loss fails closed (`503` / `BLOCK`).
+- The Fargate task has no load balancer, so its public IP is ephemeral. After a
+  task restart, read the new public IP (`aws ecs describe-tasks` →
+  `aws ec2 describe-network-interfaces`) and update `ace-scan-dev`'s `OPA_URL`.
+- Both Lambdas share ECR `ace-rhg-dev:latest`; the dispatcher differs only by
+  `ImageConfig.Command`.
+- The v3 agentic routes (`/ace/agent`, `/rhg/agentic-submit`) are **not** in the
+  cloud image.
+
 ## Testing
 
 ```bash
-python -m pytest services/ cli/ -q        # full suite
+make test                                 # services/ + cli/ + infra/aws_lambda/tests
 opa test policies/ -v
 ```
 
@@ -165,6 +189,6 @@ services/rhg/     Release Hardening Gate (gate, v2 pipeline, v3 proxy)
 policies/         Rego bundles (cis-kubernetes, cis-docker, nist-800-53, github-actions, custom)
 cli/              ace-compliance CLI package
 plugins/          CI/CD integrations (github-actions, gitlab, jenkins, argocd)
-infra/            observability (prometheus/grafana), docker, helm chart
+infra/            observability (prometheus/grafana), docker, helm chart, aws_lambda handlers
 samples/          Vulnerable example artifacts
 ```

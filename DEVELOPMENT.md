@@ -1,7 +1,7 @@
 # ACE+RHG — Development Status Report
 
 > Generated from full codebase audit against the original DEVELOPMENT.md spec.
-> **Tests: 321 passing | Last verified: 2026-10-13**
+> **Tests: 326 passing | Last verified: 2026-10-13**
 
 ---
 
@@ -79,12 +79,11 @@
 
 | Component | Status | Notes |
 |---|---|---|
-| `infra/docker/Dockerfile.lambda` | ✅ Done | Python 3.12 base, OPA binary, Mangum adapter, start.sh |
-| `infra/aws_lambda/handlers/ace_scan_handler.py` | ✅ Done | `handler = Mangum(app, lifespan="off")` |
-| `infra/aws_lambda/handlers/alert_dispatcher_handler.py` | ✅ Done | SQS-triggered, Slack dispatch, lazy router init |
-| `infra/aws_lambda/start.sh` | ✅ Done | OPA server background process |
-| `infra/terraform/lambda.tf` | ✅ Done | Lambda functions (ace-scan, alert-dispatcher), IAM role, API Gateway v2, SQS FIFO, ECR, Security Group |
-| Lambda tests | ✅ Done | 4 tests: API Gateway event, OPA down, health, SQS dispatch |
+| `infra/docker/Dockerfile.lambda` | ✅ Done | Lambda Python 3.12 base, installs `services/ace/requirements.txt`; bundles code as `./ace/`, policies as `./ace/policies/` (no OPA binary) |
+| `services/ace/lambda_handler.py` | ✅ Done | Scan entrypoint: `handler = Mangum(app, lifespan="off")`; calls remote OPA via `OPA_URL` |
+| `infra/aws_lambda/handlers/alert_dispatcher_handler.py` | ✅ Done | SQS-triggered; fans out via `build_alert_router()` |
+| OPA runtime (`ace-opa-dev`) | ✅ Done | OPA + Rego bundles image in ECR `ace-opa-dev:latest`; standalone ECS Fargate service (public IP, no ALB/NAT), provisioned ad-hoc via AWS CLI (no Terraform/scripts in repo); scan Lambda `OPA_URL` points at the task public IP |
+| Lambda tests | ✅ Done | `infra/aws_lambda/tests/` — SQS record fan-out + empty event |
 
 ### Phase 11 — LLM Provider Abstraction (Nebius / Nemotron) ✅
 
@@ -257,10 +256,11 @@ backend extractor.
 
 | Suite | Tests | Status |
 |---|---|---|
-| ACE (parsers, scorer, OPA client, API, agents, graph, alerts, metrics, websocket, LLM, policies) | 243 | ✅ All pass |
-| RHG Gate (evaluator, patch engine, helpers, API, agentic proxy) | 49 | ✅ All pass |
+| ACE (parsers, scorer, OPA client, API, agents, graph, alerts, metrics, websocket, LLM, policies) | 245 | ✅ All pass |
+| RHG Gate (evaluator, patch engine, helpers, API, agentic proxy) | 50 | ✅ All pass |
 | CLI | 29 | ✅ All pass |
-| **Total** | **321** | **✅ 100%** |
+| Lambda handlers (`infra/aws_lambda/tests/`) | 2 | ✅ All pass |
+| **Total** | **326** | **✅ 100%** |
 
 `opa test policies/` passes with no failures.
 
@@ -284,8 +284,14 @@ backend extractor.
 - Add a PostgreSQL/Celery persistence layer if scan history or async jobs are
   ever needed.
 - Publish the Helm chart (chart-releaser) and the CLI to PyPI.
+- The live AWS stack (scan + dispatcher Lambdas on ECR `ace-rhg-dev:latest`, SQS
+  `ace-alerts-dev.fifo`, shared OPA on the `ace-opa-dev` ECS Fargate service) is
+  refreshed ad-hoc via the AWS CLI. The gate alert router currently delivers to
+  Slack directly; to move to the decoupled SQS → dispatcher transport, register
+  `SQSChannel` in `build_alert_router()` behind a flag (guard against the
+  dispatcher re-enqueuing).
 
 ---
 
 *ACE+RHG v0.1 — Development Status*
-*321 tests passing; phases 1–15 landed. Only the React dashboard remains deferred.*
+*326 tests passing; phases 1–15 landed. Only the React dashboard remains deferred.*
