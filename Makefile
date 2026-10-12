@@ -17,7 +17,8 @@ HELM_ARGS ?=
 
 .PHONY: help install test test-ace test-rhg test-cli test-opa coverage \
 	lint format scan build publish-test up down logs rebuild ps \
-	helm-lint helm-template helm-install helm-uninstall image-service clean
+	helm-lint helm-template helm-install helm-uninstall image-service \
+	image-lambda deploy-aws deploy-aws-fast clean
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -32,8 +33,8 @@ install: ## Install all dev dependencies + the CLI (editable)
 
 # --- Test ------------------------------------------------------------------
 
-test: ## Run the full Python test suite (ACE + RHG + CLI)
-	python -m pytest $(ACE)/tests $(RHG)/tests $(CLI)/tests -q
+test: ## Run the full Python test suite (ACE + RHG + CLI + Lambda handlers)
+	python -m pytest $(ACE)/tests $(RHG)/tests $(CLI)/tests infra/aws_lambda/tests -q
 
 test-ace: ## Run the ACE test suite
 	python -m pytest $(ACE)/tests -q
@@ -74,6 +75,9 @@ publish-test: ## Upload the built CLI package to Test PyPI
 image-service: ## Build the combined ACE+RHG service image (Helm runtime)
 	docker build -f infra/docker/Dockerfile.service -t $(IMAGE_REPO):$(IMAGE_TAG) .
 
+image-lambda: ## Build the AWS Lambda image (linux/amd64)
+	docker build --platform linux/amd64 -f infra/docker/Dockerfile.lambda -t $(IMAGE_REPO)-lambda:$(IMAGE_TAG) .
+
 # --- Local stack -----------------------------------------------------------
 
 up: ## Start the local docker-compose stack
@@ -106,6 +110,14 @@ helm-install: ## Install/upgrade the chart, bundling the repo's Rego policies
 
 helm-uninstall: ## Uninstall the chart
 	helm uninstall ace-rhg $(HELM_ARGS)
+
+# --- AWS -------------------------------------------------------------------
+
+deploy-aws: ## Build, push, and deploy the AWS Lambda stack (scan + dispatcher)
+	bash scripts/deploy_aws.sh
+
+deploy-aws-fast: ## Deploy without rebuilding the image (uses the local image)
+	bash scripts/deploy_aws.sh --skip-build
 
 # --- Housekeeping ----------------------------------------------------------
 

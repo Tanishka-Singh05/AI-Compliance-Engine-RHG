@@ -23,6 +23,8 @@ spec:
             privileged: true
 """).decode()
 
+DOCKERFILE = base64.b64encode(b"FROM alpine:latest\nUSER root\n").decode()
+
 BACKEND_SOURCE = [
     {"language": "python", "filename": "main.py",
      "content": base64.b64encode(b'from fastapi import FastAPI\napp = FastAPI()').decode()}
@@ -156,5 +158,21 @@ class TestRHGSubmitV2:
             assert data["decision"] == "ALLOW"
             assert data["compatibility_verdict"] == "SKIPPED"
             assert data["ops_notified"] is False
+
+        app.dependency_overrides.clear()
+
+    async def test_mixed_artifacts_do_not_crash_mutation(self):
+        compat_ok = {"compatible": True, "verdict": "COMPATIBLE", "mismatches": []}
+        responses = [VULN_SCAN, MUTATE_RESULT, compat_ok, {"notified": True}, CLEAN_SCAN]
+        app.dependency_overrides[get_ace_client] = lambda: _mock_client(responses)
+        body = _submit_body()
+        body["artifacts"].append(
+            {"type": "dockerfile", "name": "Dockerfile", "content": DOCKERFILE}
+        )
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.post("/rhg/submit", json=body)
+            assert resp.status_code == 200
+            assert resp.json()["decision"] == "PATCHED"
 
         app.dependency_overrides.clear()

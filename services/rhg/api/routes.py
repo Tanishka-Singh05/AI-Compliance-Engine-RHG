@@ -179,7 +179,15 @@ async def _run_mutation_pipeline(
             except (json.JSONDecodeError, OSError):
                 artifact_dict = {}
 
-        normalized = _normalize_kubernetes_artifact(copy.deepcopy(artifact_dict))
+        if not isinstance(artifact_dict, dict):
+            # Unstructured artifact (e.g. raw Dockerfile / HCL). Its findings are
+            # still reported by the scan, but there is nothing structured to patch.
+            continue
+
+        if artifact_input.type in ("kubernetes", "helm"):
+            normalized = _normalize_kubernetes_artifact(copy.deepcopy(artifact_dict))
+        else:
+            normalized = copy.deepcopy(artifact_dict)
         artifact_findings = [
             f for f in patchable_findings if f.get("artifact") == artifact_input.name
         ]
