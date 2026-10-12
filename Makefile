@@ -12,7 +12,7 @@ POLICIES := policies
 COMPOSE := docker compose
 HELM_CHART := infra/helm/ace-rhg
 IMAGE_REPO ?= ace-rhg
-IMAGE_TAG ?= 0.1.1
+IMAGE_TAG ?= 0.1.2
 HELM_ARGS ?=
 
 .PHONY: help install test test-ace test-rhg test-cli test-opa coverage \
