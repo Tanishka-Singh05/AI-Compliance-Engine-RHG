@@ -1,0 +1,29 @@
+# Development requirements for ACE+RHG.
+#
+# Runtime dependencies come from the per-service requirement files so that
+# `pip install -r requirements-dev.txt` gives you everything needed to run the
+# services, the CLI, and the full test suite in one shot.
+#
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-dev.txt
+#   pip install -e cli/
+
+-r services/ace/requirements.txt
+-r services/rhg/requirements.txt
+
+# CLI runtime (also installed editable via `pip install -e cli/`)
+click>=8.0
+httpx>=0.27
+pyyaml>=6.0
+
+# Tooling
+ruff>=0.5
+pre-commit>=3.7
+build>=1.2
+twine>=5.0
+
+# The Open Policy Agent binary is NOT a Python package. Install it separately:
+#   curl -L -o /usr/local/bin/opa \
+#     https://openpolicyagent.org/downloads/v0.63.0/opa_linux_amd64_static
+#   chmod +x /usr/local/bin/opa
+# (or `brew install opa` / `docker run openpolicyagent/opa`).

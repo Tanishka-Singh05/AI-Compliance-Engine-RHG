@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ace-rhg.fullname" . }}-ace
+  labels:
+    {{- include "ace-rhg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ace
+spec:
+  type: {{ .Values.ace.service.type }}
+  selector:
+    {{- include "ace-rhg.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ace
+  ports:
+    - name: http
+      port: {{ .Values.ace.service.port }}
+      targetPort: http
+    - name: metrics
+      port: {{ .Values.ace.metricsPort }}
+      targetPort: metrics

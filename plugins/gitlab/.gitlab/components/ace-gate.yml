@@ -1,11 +1,15 @@
-# ACE+RHG compliance gate — GitLab CI component (v2)
+# ACE+RHG compliance gate — GitLab CI component (v3)
 #
 # Include with:
 #   include:
-#     - component: $CI_SERVER_FQDN/omkarP-bit/ace-rhg/ace-gate@v2
+#     - component: $CI_SERVER_FQDN/omkarP-bit/ace-rhg/ace-gate@v3
 #
-# Submit backend source via ACE_BACKEND_PATH for the full-stack compatibility check.
-# .env files are always excluded by the ACE service.
+# Submit backend source via ACE_BACKEND_PATH for the full-stack compatibility
+# check. .env files are always excluded by both the component and the ACE service.
+#
+# Set `agentic: "true"` to route through the v3 agentic release loop
+# (/rhg/agentic-submit: reason -> patch -> verify -> gate) instead of the CLI
+# scan. The agentic path needs only the ACE/RHG service URL, not the CLI.
 
 spec:
   inputs:
@@ -21,6 +25,8 @@ spec:
       default: http://localhost:8000
     notify-slack:
       default: "false"
+    agentic:
+      default: "false"
 
 ---
 
@@ -34,14 +40,82 @@ ace-compliance:
     ACE_ARTIFACTS_PATH: $[[ inputs.artifacts-path ]]
     ACE_BACKEND_PATH: $[[ inputs.backend-path ]]
     ACE_NOTIFY_SLACK: $[[ inputs.notify-slack ]]
+    ACE_AGENTIC: $[[ inputs.agentic ]]
   script:
     - pip install --quiet ace-compliance
     - |
-      ace scan "$ACE_ARTIFACTS_PATH" \
-        --env "$ACE_ENVIRONMENT" \
-        --fail-on "$ACE_FAIL_ON" \
-        --ace-url "$ACE_URL" \
-        --output json | tee ace-report.json
+      if [ "$ACE_AGENTIC" = "true" ]; then
+        python3 - "$ACE_ARTIFACTS_PATH" "$ACE_BACKEND_PATH" "$ACE_ENVIRONMENT" "$CI_PIPELINE_ID" > ace-request.json <<'PY'
+      import base64
+      import json
+      import os
+      import sys
+
+      artifacts_path, backend_path, environment, pipeline_id = sys.argv[1:5]
+      ignore = {".git", "node_modules", "__pycache__", "dist", "build", "tests"}
+
+      def walk(root):
+          for dirpath, dirnames, filenames in os.walk(root):
+              dirnames[:] = [d for d in dirnames if d not in ignore]
+              for name in filenames:
+                  if name == ".env" or name.startswith(".env."):
+                      continue
+                  yield os.path.join(dirpath, name)
+
+      def read(path):
+          with open(path, "rb") as fh:
+              return base64.b64encode(fh.read()).decode()
+
+      def infer_type(name):
+          if ".github/workflows" in name:
+              return "github_actions"
+          if name.endswith((".tf", ".tf.json")):
+              return "terraform"
+          if os.path.basename(name) == "Dockerfile" or name.endswith(".dockerfile"):
+              return "dockerfile"
+          return "kubernetes"
+
+      def is_artifact(name):
+          return os.path.basename(name) == "Dockerfile" or name.endswith(
+              (".yaml", ".yml", ".tf", ".tf.json", ".dockerfile")
+          )
+
+      def infer_language(name):
+          for suffix, language in ((".py", "python"), (".ts", "node"), (".js", "node"), (".go", "go")):
+              if name.endswith(suffix):
+                  return language
+          return "unknown"
+
+      artifacts = [
+          {"type": infer_type(p), "name": p, "content": read(p)}
+          for p in walk(artifacts_path)
+          if is_artifact(p)
+      ]
+      backend = [
+          {"language": infer_language(p), "filename": p, "content": read(p)}
+          for p in walk(backend_path)
+          if p.endswith((".py", ".js", ".ts", ".go"))
+      ]
+      print(json.dumps({
+          "pipeline_id": pipeline_id,
+          "repo": os.environ.get("CI_PROJECT_PATH", "unknown/repo"),
+          "branch": os.environ.get("CI_COMMIT_REF_NAME", "main"),
+          "environment": environment,
+          "artifacts": artifacts,
+          "backend_source": backend,
+      }))
+      PY
+        curl -sS -X POST "$ACE_URL/rhg/agentic-submit" \
+          -H "Content-Type: application/json" \
+          --data @ace-request.json | tee ace-report.json
+        python3 -c "import json,sys; d=json.load(open('ace-report.json')); print('ACE gate:', d.get('decision')); sys.exit(1 if d.get('decision') == 'BLOCK' else 0)"
+      else
+        ace scan "$ACE_ARTIFACTS_PATH" \
+          --env "$ACE_ENVIRONMENT" \
+          --fail-on "$ACE_FAIL_ON" \
+          --ace-url "$ACE_URL" \
+          --output json | tee ace-report.json
+      fi
   artifacts:
     when: always
     paths:

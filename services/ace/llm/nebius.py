@@ -13,7 +13,7 @@ import httpx
 from ace.llm.base import LLMMessage, LLMProvider, LLMResponse
 
 DEFAULT_BASE_URL = "https://api.studio.nebius.ai/v1"
-DEFAULT_MODEL = "nvidia/llama-3.1-nemotron-70b-instruct"
+DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b"
 REQUEST_TIMEOUT_SECONDS = 60.0
 
 

@@ -16,6 +16,7 @@ import yaml
 from ace.agents.graph import build_release_graph, recursion_config, run_release_loop
 from ace.agents.state import GateDecision, NextAction, Verdict, initial_state
 from ace.engine.artifact_codec import decode_content
+from ace.parsers.dockerfile import DockerfileParser
 
 BACKEND_SCAN = {
     "language": "python",
@@ -512,7 +513,7 @@ class TestNonKubernetesArtifacts:
             "message": "Runs as root",
             "artifact": "Dockerfile",
         }
-        rem = StubRemediation([_plan([{"op": "replace", "path": "/metadata/user", "value": "appuser"}])])
+        rem = StubRemediation([_plan([{"op": "replace", "path": "/instructions/1/args", "value": "appuser"}])])
         out = await run_release_loop(
             _graph(rem, StubVerification([PASS])),
             _state(
@@ -520,14 +521,17 @@ class TestNonKubernetesArtifacts:
                 artifacts=[{"type": "dockerfile", "name": "Dockerfile", "content": _b64(dockerfile)}],
             ),
         )
-        patched = json.loads(_patched(out))
-        assert patched["metadata"]["user"] == "appuser"
-        # Instructions are the authoritative parse, and must survive the patch.
+        # The mutation patches the normalised instruction; the patched artifact
+        # must re-encode as Dockerfile text (not JSON) so a re-scan re-parses it
+        # through the same normaliser. ``metadata`` is re-derived from the text.
+        assert _patched(out).startswith("FROM python:3.11\n")
+        patched = DockerfileParser().parse(_patched(out), "Dockerfile").raw
         assert patched["instructions"] == [
             {"instruction": "FROM", "args": "python:3.11"},
-            {"instruction": "USER", "args": "root"},
+            {"instruction": "USER", "args": "appuser"},
             {"instruction": "EXPOSE", "args": "8000"},
         ]
+        assert patched["metadata"]["user"] == "appuser"
         assert patched["metadata"]["exposed_ports"] == ["8000"]
 
     @pytest.mark.asyncio

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: ace-rhg
+description: AI Compliance Engine (ACE) + Release Hardening Gate (RHG) — policy-as-code scanning, agentic remediation, and gate decisions.
+type: application
+version: 0.1.0
+appVersion: "0.1.1"
+keywords:
+  - compliance
+  - security
+  - opa
+  - devsecops
+  - kubernetes
+home: https://github.com/omkarP-bit/AI-Compliance-Engine-RHG
+sources:
+  - https://github.com/omkarP-bit/AI-Compliance-Engine-RHG
+maintainers:
+  - name: Omkar
+    url: https://github.com/omkarP-bit

@@ -87,8 +87,8 @@ class TestWebSocketEndpoint:
                 yield {"type": "message", "data": '{"event": "test"}'}
                 yield {"type": "message", "data": '{"event": "done"}'}
 
-            mock_pubsub.listen = AsyncMock(return_value=listen_gen())
-            mock_redis.pubsub = AsyncMock(return_value=mock_pubsub)
+            mock_pubsub.listen = MagicMock(return_value=listen_gen())
+            mock_redis.pubsub = MagicMock(return_value=mock_pubsub)
             mock_redis.aclose = AsyncMock()
             mock_redis_factory.return_value = mock_redis
 

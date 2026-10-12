@@ -66,7 +66,27 @@ def encode_artifact(document: dict, artifact_type: str) -> str:
     """Serialise a normalised document back to a request/artifact body."""
     if artifact_type in YAML_ARTIFACT_TYPES:
         return yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
+    if artifact_type == "dockerfile":
+        return _encode_dockerfile(document)
     return json.dumps(document, indent=2)
+
+
+def _encode_dockerfile(document: dict) -> str:
+    """Render a normalised Dockerfile back to Dockerfile text.
+
+    The parser treats ``instructions`` as authoritative (``metadata`` is derived
+    from them), so the round-trip emits one line per instruction. Comments and
+    blank lines are already dropped during parsing, but the output must still be
+    a valid Dockerfile rather than a JSON dump of the parse tree.
+    """
+    lines: list[str] = []
+    for instruction in document.get("instructions") or []:
+        name = str(instruction.get("instruction") or "").strip()
+        if not name:
+            continue
+        args = str(instruction.get("args") or "").strip()
+        lines.append(f"{name} {args}".strip())
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
 def decode_content(content: str) -> str:

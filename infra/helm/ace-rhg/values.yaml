@@ -1,0 +1,81 @@
+# Default values for the ace-rhg chart.
+# Override with `-f my-values.yaml` or `--set`.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Image for the ACE and RHG service containers. Both run from the same
+# container image (repo root Dockerfile) and differ only by `command`.
+image:
+  repository: ghcr.io/omkarp-bit/ace-rhg
+  pullPolicy: IfNotPresent
+  tag: "0.1.1"
+
+imagePullSecrets: []
+
+opa:
+  image:
+    repository: openpolicyagent/opa
+    tag: "0.63.0"
+  resources: {}
+    # limits:
+    #   cpu: 250m
+    #   memory: 256Mi
+
+redis:
+  image:
+    repository: redis
+    tag: "7-alpine"
+  resources: {}
+
+ace:
+  replicaCount: 1
+  metricsPort: 9090
+  service:
+    type: ClusterIP
+    port: 8000
+  # Non-secret environment. OPA_URL / REDIS_URL are wired automatically.
+  env:
+    MODEL_PROVIDER: nebius
+    NEBIUS_BASE_URL: https://api.studio.nebius.ai/v1
+    NEMOTRON_MODEL: nvidia/nemotron-3-super-120b-a12b
+    AGENT_CONFIDENCE_THRESHOLD: "0.85"
+    AGENT_MAX_RETRIES: "3"
+    NOTIFY_ON_SEVERITY: CRITICAL,HIGH
+    DASHBOARD_URL: http://localhost:3000
+  resources: {}
+
+rhg:
+  replicaCount: 1
+  metricsPort: 9091
+  service:
+    type: ClusterIP
+    port: 8001
+  # Non-secret environment. ACE_URL / REDIS_URL are wired automatically.
+  env:
+    BLOCK_ON_SEVERITY: HIGH
+    MAX_MUTATION_RETRIES: "3"
+  resources: {}
+
+# Rego bundles for the OPA server. Keys are ConfigMap filenames; populate them
+# with `--set-file` (see `make helm-install`) or provide your own ConfigMap and
+# set `policies.existingConfigMap`.
+policies:
+  existingConfigMap: ""
+  inline: {}
+
+# Secrets consumed by ACE/RHG. Prefer `existingSecret` in real deployments.
+secrets:
+  create: true
+  existingSecret: ""
+  nebiusApiKey: ""
+  groqApiKey: ""
+  slackWebhookUrl: ""
+  smtpPassword: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: ace-rhg.local
+  tls: []

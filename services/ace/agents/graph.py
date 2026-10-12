@@ -46,7 +46,6 @@ from ace.agents.state import (
     should_block,
 )
 from ace.agents.verification_agent import VerificationAgent
-from ace.api.compatibility import run_compatibility_check
 from ace.api.websocket import publish_event
 from ace.engine.artifact_codec import (
     ArtifactDecodeError,
@@ -400,6 +399,11 @@ async def _mutating(state: AgentState, patcher) -> dict:
 
 
 async def _compatibility_check(state: AgentState) -> dict:
+    # Imported lazily: ``ace.api.compatibility`` imports ``ace.agents`` at module
+    # scope, so a top-level import here would create an import cycle that only
+    # resolves when something happens to import ``ace.agents`` first.
+    from ace.api.compatibility import run_compatibility_check
+
     finding = state.get("finding") or {}
     backend_scan = state.get("backend_scan") or {}
     patches = state.get("patches_applied") or []

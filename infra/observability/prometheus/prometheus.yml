@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: ace-rhg
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ACE exposes the prometheus_client registry on ACE_METRICS_PORT (9090).
+  - job_name: ace
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ace:9090"]
+
+  # RHG records rhg_gate_decisions_total; it exposes its own registry on
+  # RHG_METRICS_PORT (9091).
+  - job_name: rhg
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["rhg:9091"]

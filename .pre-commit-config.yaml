@@ -1,0 +1,46 @@
+# Pre-commit hooks for ACE+RHG.
+#
+#   pip install pre-commit
+#   pre-commit install
+#   pre-commit run --all-files
+#
+# The local hooks assume `ace` and `opa` are on PATH. Install the CLI with
+# `pip install -e cli/` and OPA from https://www.openpolicyagent.org/docs/latest/#running-opa.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: ^infra/helm/.*/templates/
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: mixed-line-ending
+
+  - repo: local
+    hooks:
+      - id: opa-test
+        name: OPA policy tests
+        entry: opa test policies/ -v
+        language: system
+        files: ^policies/.*\.rego$
+        pass_filenames: false
+
+      - id: ace-scan
+        name: ACE Compliance Scan
+        entry: bash -c 'ace scan . --fail-on HIGH'
+        language: system
+        files: \.(yaml|yml|tf|dockerfile)$
+        exclude: ^(infra/helm/|samples/)
+        pass_filenames: false

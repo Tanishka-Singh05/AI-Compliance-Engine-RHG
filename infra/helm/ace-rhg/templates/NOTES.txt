@@ -1,0 +1,43 @@
+ACE+RHG has been installed in namespace {{ .Release.Namespace }}.
+
+Components
+----------
+  ACE (scan/agent API)  {{ include "ace-rhg.fullname" . }}-ace:{{ .Values.ace.service.port }}
+  RHG (gate proxy)      {{ include "ace-rhg.fullname" . }}-rhg:{{ .Values.rhg.service.port }}
+  OPA (policy engine)   {{ include "ace-rhg.fullname" . }}-opa:8181
+  Redis (event bus)     {{ include "ace-rhg.fullname" . }}-redis:6379
+
+Policies
+--------
+{{- if .Values.policies.existingConfigMap }}
+  Using existing ConfigMap: {{ .Values.policies.existingConfigMap }}
+{{- else if .Values.policies.inline }}
+  Loaded {{ len .Values.policies.inline }} Rego file(s) into {{ include "ace-rhg.policiesName" . }}.
+{{- else }}
+  WARNING: no Rego policies were provided, so OPA is running empty.
+  Install policies from the repo with:
+
+    make helm-install HELM_ARGS="--namespace {{ .Release.Namespace }}"
+
+  or set an existing bundle:
+
+    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} \
+      --set policies.existingConfigMap=my-policies
+{{- end }}
+
+Next steps
+----------
+  Port-forward the ACE API:
+
+    kubectl -n {{ .Release.Namespace }} port-forward \
+      svc/{{ include "ace-rhg.fullname" . }}-ace {{ .Values.ace.service.port }}:{{ .Values.ace.service.port }}
+
+  Then:
+
+    export ACE_URL=http://localhost:{{ .Values.ace.service.port }}
+    ace scan ./samples --output json --fail-on HIGH
+
+  Build/push the combined image used by this chart:
+
+    docker build -f infra/docker/Dockerfile.service -t {{ .Values.image.repository }}:{{ .Values.image.tag }} .
+    docker push {{ .Values.image.repository }}:{{ .Values.image.tag }}

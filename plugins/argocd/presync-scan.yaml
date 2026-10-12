@@ -1,0 +1,42 @@
+# Argo CD PreSync gate.
+#
+# Runs before Argo CD applies an Application's resources. If the scan blocks
+# (exit code != 0), the sync is aborted and the release never reaches the
+# cluster. Install it next to your Application, or drop it in the same
+# directory that Argo CD renders.
+#
+# The manifests under test are supplied via a ConfigMap named
+# `ace-presync-manifests` (one key per file). Swap the source for a git
+# checkout or an `argocd app manifests` dump as your workflow requires.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ace-presync-scan
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded,BeforeHookCreation
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: ace-scan
+          image: python:3.12-slim
+          command:
+            - sh
+            - -c
+            - |
+              pip install --no-cache-dir ace-compliance &&
+              ace scan /manifests --output json --fail-on HIGH
+          env:
+            - name: ACE_URL
+              value: http://ace-rhg-ace:8000
+          volumeMounts:
+            - name: manifests
+              mountPath: /manifests
+              readOnly: true
+      volumes:
+        - name: manifests
+          configMap:
+            name: ace-presync-manifests

@@ -1,0 +1,22 @@
+{{- if not .Values.policies.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ace-rhg.fullname" . }}-policies
+  labels:
+    {{- include "ace-rhg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+data:
+  {{- if .Values.policies.inline }}
+  {{- range $name, $body := .Values.policies.inline }}
+  {{ $name }}: |-
+    {{- $body | nindent 4 }}
+  {{- end }}
+  {{- else }}
+  placeholder.rego: |-
+    package custom.placeholder
+
+    # No policies were supplied. Populate .Values.policies.inline (e.g. via
+    # `make helm-install`) or set .Values.policies.existingConfigMap.
+  {{- end }}
+{{- end }}

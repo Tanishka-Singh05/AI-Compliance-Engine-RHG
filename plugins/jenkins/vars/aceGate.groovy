@@ -1,4 +1,4 @@
-// ACE+RHG compliance gate — Jenkins shared library (v2)
+// ACE+RHG compliance gate — Jenkins shared library (v3)
 //
 // Usage (Jenkinsfile):
 //   @Library('ace-rhg') _
@@ -10,7 +10,8 @@
 //         artifactsPath:  './k8s',
 //         backendPath:    './src',     // submitted for compatibility check
 //         aceUrl:         env.ACE_URL,
-//         notifySlack:    true
+//         notifySlack:    true,
+//         agentic:        false        // true -> v3 agentic release loop
 //       )
 //     }
 //   }
@@ -22,6 +23,9 @@ def call(Map config = [:]) {
     def backendPath   = config.backendPath ?: './src'
     def aceUrl        = config.aceUrl ?: env.ACE_URL ?: 'http://localhost:8000'
     def notifySlack   = config.notifySlack ?: false
+    def agentic       = config.agentic ?: false
+
+    def endpoint      = agentic ? '/rhg/agentic-submit' : '/rhg/submit'
 
     def pipelineId = "${env.JOB_NAME}-${env.BUILD_NUMBER}"
 
@@ -45,7 +49,7 @@ def call(Map config = [:]) {
     ]
 
     def result = httpRequest(
-        url: "${aceUrl}/rhg/submit",
+        url: "${aceUrl}${endpoint}",
         httpMode: 'POST',
         requestBody: writeJSON(json: body),
         contentType: 'APPLICATION_JSON',
@@ -57,10 +61,14 @@ def call(Map config = [:]) {
 
     currentBuild.description = "ACE gate: ${parsed.decision}" +
         " — ${parsed.mutations_applied} auto-patches" +
-        " — compat ${parsed.compatibility_verdict}"
+        " — compat ${parsed.compatibility_verdict}" +
+        (agentic ? " — escalated ${parsed.escalated}" : "")
 
     if (parsed.decision == 'BLOCK') {
         echo "ACE gate BLOCKED: ${parsed.blocking_findings}"
+        if (agentic && parsed.escalation_reason) {
+            echo "Escalation reason: ${parsed.escalation_reason}"
+        }
         error "ACE+RHG gate: BLOCK — ${parsed.blocking_findings.size()} unresolvable violations"
     } else {
         echo "ACE gate: ${parsed.decision}"

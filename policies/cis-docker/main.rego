@@ -21,11 +21,20 @@ deny[finding] if {
     }
 }
 
+# A digest pin is the strongest form of pinning, e.g. ``repo:tag@sha256:...``.
+image_pinned(image) if contains(image, "@sha256:")
+
+# Otherwise accept an explicit, non-latest tag on the final path segment.
+# Splitting on "/" first keeps registry ports (localhost:5000/img:1.0) intact, and
+# dropping any digest suffix avoids the tag+digest case yielding three parts.
 image_pinned(image) if {
-    parts := split(image, ":")
+    no_digest := split(image, "@")[0]
+    segments := split(no_digest, "/")
+    last := segments[count(segments) - 1]
+    parts := split(last, ":")
     count(parts) == 2
     parts[1] != "latest"
-    not contains(parts[1], "@")
+    parts[1] != ""
 }
 
 # CIS-DL-2.1 — container runs as root

@@ -9,12 +9,9 @@ from pydantic import BaseModel
 
 from ace.api.websocket import publish_event
 from ace.engine.opa_client import OPAClient
-from ace.metrics.prometheus import track_scan
-<<<<<<< Updated upstream
-from ace.parsers.docker_compose import DockerComposeParser
-=======
+from ace.metrics.prometheus import ACTIVE_SCANS, COMPLIANCE_SCORE, OPA_HEALTH, track_scan
 from ace.notifier.mutation_notifier import MutationEvent, MutationNotifier
->>>>>>> Stashed changes
+from ace.parsers.docker_compose import DockerComposeParser
 from ace.parsers.dockerfile import DockerfileParser
 from ace.parsers.github_actions import GitHubActionsParser
 from ace.parsers.helm import HelmParser
@@ -102,57 +99,68 @@ class ScanAndMutateResponse(BaseModel):
 @router.post("/scan", response_model=ScanResponse)
 async def scan(request: ScanRequest):
     start = time.time()
-    if not await opa.health():
+    opa_up = await opa.health()
+    OPA_HEALTH.set(1 if opa_up else 0)
+    if not opa_up:
         raise HTTPException(503, "OPA policy engine unavailable")
 
-    all_findings = []
-    for artifact in request.artifacts:
-        raw_content = base64.b64decode(artifact.content).decode()
-        parser = next((p for p in PARSERS if p.supports(artifact.name)), None)
-        if not parser:
-            continue
-        normalized = parser.parse(raw_content, artifact.name)
-        policy_path = POLICY_MAP.get(normalized.artifact_type, "ace/cis/kubernetes")
-        findings = await opa.evaluate_deny(policy_path, normalized.raw)
-        for f in findings:
-            f["artifact"] = artifact.name
-        all_findings.extend(findings)
+    ACTIVE_SCANS.inc()
+    try:
+        all_findings = []
+        for artifact in request.artifacts:
+            raw_content = base64.b64decode(artifact.content).decode()
+            parser = next((p for p in PARSERS if p.supports(artifact.name)), None)
+            if not parser:
+                continue
+            normalized = parser.parse(raw_content, artifact.name)
+            policy_path = POLICY_MAP.get(normalized.artifact_type, "ace/cis/kubernetes")
+            findings = await opa.evaluate_deny(policy_path, normalized.raw)
+            for f in findings:
+                f["artifact"] = artifact.name
+            all_findings.extend(findings)
 
-    risk = score_findings(all_findings, request.environment)
-    backend_scan = {}
-    if request.backend_source:
-        from ace.backend_scanner.extractor import BackendExtractor
-
-        profile = BackendExtractor().extract(
-            [b.model_dump() for b in request.backend_source]
+        risk = score_findings(all_findings, request.environment)
+        # ``risk.score`` is higher-is-worse; the dashboard's "Compliance score"
+        # gauge is higher-is-better, so invert it onto the same 0-10 scale.
+        COMPLIANCE_SCORE.labels(environment=request.environment).set(
+            round(10.0 - risk.score, 2)
         )
-        backend_scan = {
-            "language": profile.language,
-            "port_bindings": profile.port_bindings,
-            "env_vars_used": profile.env_vars_used,
-            "routes": profile.routes,
-            "frameworks": profile.frameworks,
-        }
+        backend_scan = {}
+        if request.backend_source:
+            from ace.backend_scanner.extractor import BackendExtractor
 
-    duration = time.time() - start
-    outcome = "block" if risk.severity.value in ("CRITICAL", "HIGH") else "allow"
-    track_scan(request.environment, outcome, duration, all_findings)
-    await publish_event("scan.completed", {
-        "scan_id": "",
-        "pipeline_id": request.pipeline_id,
-        "environment": request.environment,
-        "risk_score": risk.score,
-        "overall_severity": risk.severity.value,
-        "finding_count": len(all_findings),
-    })
-    return ScanResponse(
-        scan_id=str(uuid.uuid4()),
-        pipeline_id=request.pipeline_id,
-        risk_score=risk.score,
-        overall_severity=risk.severity.value,
-        findings=all_findings,
-        backend_scan=backend_scan,
-    )
+            profile = BackendExtractor().extract(
+                [b.model_dump() for b in request.backend_source]
+            )
+            backend_scan = {
+                "language": profile.language,
+                "port_bindings": profile.port_bindings,
+                "env_vars_used": profile.env_vars_used,
+                "routes": profile.routes,
+                "frameworks": profile.frameworks,
+            }
+
+        duration = time.time() - start
+        outcome = "block" if risk.severity.value in ("CRITICAL", "HIGH") else "allow"
+        track_scan(request.environment, outcome, duration, all_findings)
+        await publish_event("scan.completed", {
+            "scan_id": "",
+            "pipeline_id": request.pipeline_id,
+            "environment": request.environment,
+            "risk_score": risk.score,
+            "overall_severity": risk.severity.value,
+            "finding_count": len(all_findings),
+        })
+        return ScanResponse(
+            scan_id=str(uuid.uuid4()),
+            pipeline_id=request.pipeline_id,
+            risk_score=risk.score,
+            overall_severity=risk.severity.value,
+            findings=all_findings,
+            backend_scan=backend_scan,
+        )
+    finally:
+        ACTIVE_SCANS.dec()
 
 
 @router.post("/mutate", response_model=MutateResponse)

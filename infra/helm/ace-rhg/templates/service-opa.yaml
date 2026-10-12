@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ace-rhg.fullname" . }}-opa
+  labels:
+    {{- include "ace-rhg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "ace-rhg.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+  ports:
+    - name: http
+      port: 8181
+      targetPort: http

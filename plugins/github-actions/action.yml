@@ -1,5 +1,5 @@
-name: ACE+RHG Compliance Gate (v2)
-description: Scan deployment artifacts and backend source with ACE, auto-apply compatible OPA mutations, and set the gate decision as a native status check.
+name: ACE+RHG Compliance Gate (v3)
+description: Scan deployment artifacts and backend source with ACE, auto-apply compatible OPA mutations, and set the gate decision as a native status check. Set agentic to run the v3 release loop (reason -> patch -> verify -> gate).
 
 inputs:
   ace-url:
@@ -31,6 +31,10 @@ inputs:
     default: ${{ github.token }}
   notify-slack:
     description: Send OPS mutation notifications via Slack
+    required: false
+    default: "false"
+  agentic:
+    description: Run the v3 agentic release loop (reason -> patch -> verify -> gate) instead of the v2 mutation pipeline
     required: false
     default: "false"
 

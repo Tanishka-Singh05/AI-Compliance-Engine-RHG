@@ -77,21 +77,39 @@ git push  →  CI/CD  →  RHG  →  ACE (OPA + Agents)  →  ALLOW / PATCH / BL
 
 ## Quick start
 
-### Option 1: Cloud (recommended — zero setup)
+The CLI talks to either a **local** stack or a **deployed** backend. Which one is
+an explicit choice via `--profile` (or the `ACE_PROFILE` environment variable):
 
-The backend is fully deployed on AWS. Just install the CLI and set the URL:
+| `--profile` | ACE target | RHG target |
+|---|---|---|
+| `local` | `http://localhost:8000` | `http://localhost:8001` |
+| `cloud` | `$ACE_URL` (required) | `$RHG_URL` (required) |
+| `auto` (default) | `$ACE_URL` if set, else localhost | `$RHG_URL` if set, else localhost |
+
+An explicit `--ace-url` / `--rhg-url` always overrides the profile.
+
+### Option 1: Cloud
+
+The v2 backend is deployed on AWS. Install the CLI and point it at the API:
 
 ```bash
-# Install
 pip install ace-compliance
 
-# Set the backend URL (permanent — survives terminal restarts)
-echo 'export ACE_URL=https://fw6mh9jzpc.execute-api.ap-south-1.amazonaws.com' >> ~/.zshrc
-source ~/.zshrc
+# Pick the cloud explicitly (recommended) ...
+ace scan ./k8s/ --profile cloud   # requires ACE_URL in the environment
 
-# Scan
+# ... or set it once; the default `auto` profile will then prefer it
+export ACE_URL=https://fw6mh9jzpc.execute-api.ap-south-1.amazonaws.com
 ace scan ./k8s/
 ```
+
+> A globally exported `ACE_URL` (e.g. added to `~/.zshrc`) is inherited by every
+> run, so it will silently shadow a local stack. Use `--profile local` while
+> working against Docker Compose, or keep the cloud URL out of your shell profile.
+
+> The current `ace-scan-dev` deployment predates the v3 agentic endpoints, so
+> `ace agent` returns 404 there. Run the loop locally (below) or redeploy the v3
+> image.
 
 ### Option 2: Local development (Docker Compose)
 
@@ -107,8 +125,9 @@ docker-compose up -d
 # OPA        →  http://localhost:8181
 # Redis      →  localhost:6390
 
-# Scan against local backend
-ace scan --ace-url http://localhost:8000 samples/
+# Scan and run the agentic loop against the local stack
+ace scan  --profile local samples/
+ace agent --profile local samples/
 
 # Tear down
 docker-compose down
@@ -131,7 +150,8 @@ ace scan <paths...> [options]
 | `--env` | `production` | Target environment (`production`, `staging`, `development`) |
 | `--output` | `text` | Output format: `text` or `json` |
 | `--fail-on` | `HIGH` | Exit 1 if severity >= this level (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) |
-| `--ace-url` | `$ACE_URL` | Override the ACE service URL |
+| `--profile` | `auto` | Deployment profile: `local`, `cloud`, or `auto` (or set `ACE_PROFILE`) |
+| `--ace-url` | *(profile)* | Override the ACE service URL (wins over the profile) |
 
 **Examples:**
 
@@ -156,6 +176,9 @@ ace scan ./artifacts/ --output json | jq '.findings[] | select(.severity == "CRI
 
 # Override URL inline
 ace scan --ace-url https://my-api.example.com ./deploy.yaml
+
+# Force the local Docker Compose stack (ignores an exported ACE_URL)
+ace scan --profile local ./k8s/
 ```
 
 **Text output:**
@@ -195,20 +218,76 @@ ace scan --ace-url https://my-api.example.com ./deploy.yaml
 }
 ```
 
-### Configuration
+### `ace agent` — run the agentic release loop
 
-Set `ACE_URL` once and the CLI uses it everywhere:
+```
+ace agent <paths...> [options]
+```
+
+Scans the artifacts exactly like `ace scan`, then drives the v3 LangGraph loop
+(reason → remediate → compatibility gate) and exits non-zero on `BLOCK`, on a
+residual severity at/above `--fail-on`, or on escalation with
+`--fail-on-escalation`.
+
+**Options:**
+
+| Option | Default | Description |
+|---|---|---|
+| `--env` | `production` | Target environment |
+| `--output` | `text` | Output format: `text` or `json` |
+| `--fail-on` | `HIGH` | Exit 1 if residual severity >= this level |
+| `--fail-on-escalation` | off | Exit 1 when the loop escalates to a human |
+| `--via` | `ace` | `ace` → `POST /ace/agent`; `rhg` → `POST /rhg/agentic-submit` |
+| `--profile` | `auto` | Deployment profile: `local`, `cloud`, or `auto` |
+| `--ace-url` | *(profile)* | ACE service URL override (`--via ace`) |
+| `--rhg-url` | *(profile)* | RHG service URL override (`--via rhg`) |
+| `--backend-path` | *(none)* | Backend source file/dir to analyze (repeatable; `.env` is never sent) |
+| `--repo` | `unknown/repo` | Repository slug (`--via rhg`) |
+| `--branch` | `main` | Branch name (`--via rhg`) |
+| `--model-provider` | `$MODEL_PROVIDER` | LLM provider override (ACE only) |
+| `--max-retries` | `$AGENT_MAX_RETRIES` | Retries per finding (ACE only) |
+| `--confidence-threshold` | `$AGENT_CONFIDENCE_THRESHOLD` | Below this, escalate to a human (ACE only) |
+| `--block-on-severity` | `HIGH` | Severity at/above which a finding blocks (ACE only) |
+
+**Examples:**
 
 ```bash
-# Permanent (add to shell profile)
-echo 'export ACE_URL=https://fw6mh9jzpc.execute-api.ap-south-1.amazonaws.com' >> ~/.zshrc
-source ~/.zshrc
+# Local agentic run against Docker Compose
+ace agent ./k8s/ --profile local
 
-# Per-session
-export ACE_URL=https://fw6mh9jzpc.execute-api.ap-south-1.amazonaws.com
+# Include backend source for agent context
+ace agent ./k8s/ --backend-path ./src --output json
 
-# Per-command
-ace scan --ace-url https://fw6mh9jzpc.execute-api.ap-south-1.amazonaws.com .
+# Route through RHG (records the gate metric and dispatches the gate alert)
+ace agent ./k8s/ --via rhg --profile local
+
+# Fail the pipeline if the loop had to escalate
+ace agent ./k8s/ --fail-on-escalation
+```
+
+### Choosing local vs cloud
+
+The CLI resolves its target in this order (highest priority first):
+
+1. `--ace-url` / `--rhg-url` (explicit flag)
+2. `--profile` / `ACE_PROFILE` → `local` (localhost), `cloud` (`$ACE_URL`/`$RHG_URL`), or `auto`
+3. `ACE_URL` / `RHG_URL` when the profile is `auto`
+4. `http://localhost:8000` / `http://localhost:8001`
+
+```bash
+# Force the local stack, ignoring any exported ACE_URL
+ace scan  ./k8s/ --profile local
+ace agent ./k8s/ --profile local
+
+# Force cloud (requires ACE_URL; add RHG_URL for --via rhg)
+ACE_URL=https://fw6mh9jzpc.execute-api.ap-south-1.amazonaws.com \
+  ace agent ./k8s/ --profile cloud
+
+# Set the profile once for the session
+export ACE_PROFILE=local
+
+# One-off override, beats everything
+ace scan ./k8s/ --ace-url http://localhost:8000
 ```
 
 ### Exit codes
@@ -269,6 +348,12 @@ OPA Policy Engine (bundled in container)
 | POST | `/ace/scan` | Scan artifacts for violations |
 | POST | `/ace/mutate` | Generate patches for findings |
 | POST | `/ace/scan-and-mutate` | Scan + auto-generate patches |
+
+> **v3 agentic routes are not deployed here.** The `ace-scan-dev` stack exposes
+> only the v2 routes above. The v3 endpoints — `POST /ace/agent` (ACE) and
+> `POST /rhg/agentic-submit` (RHG) — require redeploying the v3 image; until
+> then `ace agent` returns HTTP 404 against this URL. Run the loop locally with
+> `ace agent ./k8s/ --profile local`.
 
 **Direct API usage:**
 
@@ -394,7 +479,7 @@ Configure the reasoning backend:
 | `MODEL_PROVIDER` | `nebius` | Which registered `LLMProvider` to use |
 | `NEBIUS_API_KEY` | *(empty)* | Nebius Token Factory key |
 | `NEBIUS_BASE_URL` | `https://api.studio.nebius.ai/v1` | Override for a gateway |
-| `NEMOTRON_MODEL` | `nvidia/llama-3.1-nemotron-70b-instruct` | Model id |
+| `NEMOTRON_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Model id |
 | `AGENT_CONFIDENCE_THRESHOLD` | `0.85` | Below this, escalate to a human |
 | `AGENT_MAX_RETRIES` | `3` | Retries per finding, on top of the first attempt |
 
@@ -411,9 +496,14 @@ keeps working normally.
 ```
 ace-rhg/
 ├── README.md
-├── DEVELOPMENT.md
+├── CLAUDE.md                ← Architecture & contributor reference
+├── DEVELOPMENT.md           ← Phase/build status report
+├── LICENSE                  ← MIT
+├── Makefile                 ← install / test / lint / build / up / helm targets
 ├── Dockerfile               ← Lambda container image (FastAPI + OPA + Mangum)
 ├── docker-compose.yml       ← Local dev stack
+├── .pre-commit-config.yaml  ← ruff, yaml/json checks, OPA + ACE hooks
+├── requirements-dev.txt     ← Dev + service dependencies
 ├── entrypoint.sh            ← Docker entrypoint (local)
 ├── entrypoint.py            ← Python entrypoint (alternative)
 │
@@ -428,26 +518,39 @@ ace-rhg/
 │   │   ├── scoring/         ← Risk scorer
 │   │   ├── alerts/          ← Slack, SQS, alert router
 │   │   ├── mcp/             ← MCP server and tool registry
-│   │   └── tests/           ← 201 tests
+│   │   └── tests/           ← 243 tests
 │   │
 │   └── rhg/                 ← Release Hardening Gate
 │       ├── api/
 │       ├── gate/            ← Policy evaluator
 │       ├── mutator/         ← Re-export shim → ace.mutator.patch_engine
-│       └── tests/           ← 40 tests
+│       └── tests/           ← 49 tests
 │
 ├── policies/                ← OPA Rego bundles
 │   ├── cis-kubernetes/
 │   ├── cis-docker/
+│   ├── cis-docker-compose/
+│   ├── cis-terraform/
 │   ├── nist-800-53/
-│   └── github-actions/
+│   ├── github-actions/
+│   └── custom/              ← Custom-policy template (wire into POLICY_MAP)
 │
 ├── cli/                     ← ace-compliance CLI package
 │   ├── ace_compliance/
 │   └── pyproject.toml
 │
-├── samples/                 ← Example vulnerable artifacts
-└── tests/
+├── plugins/                 ← CI/CD integrations
+│   ├── github-actions/      ← npm action
+│   ├── gitlab/
+│   ├── jenkins/
+│   └── argocd/              ← Application + PreSync gate
+│
+├── infra/                   ← Deployment & observability
+│   ├── helm/ace-rhg/        ← Helm chart (ACE, RHG, OPA, Redis)
+│   ├── docker/              ← Combined ACE+RHG service image
+│   └── observability/       ← Prometheus + Grafana provisioning
+│
+└── samples/                 ← Example vulnerable artifacts
 ```
 
 ---
@@ -471,7 +574,7 @@ pytest services/rhg/tests/ -v                     # RHG gate + mutator
 pytest cli/tests/ -v                              # CLI
 ```
 
-**245 tests passing** (ACE 201 · RHG 40 · CLI 4)
+**321 tests passing** (ACE 243 · RHG 49 · CLI 29)
 
 ---
 

@@ -40,11 +40,11 @@ manager = ConnectionManager()
 async def events(websocket: WebSocket):
     await manager.connect(websocket)
     redis = aioredis.from_url(REDIS_URL)
-    pubsub = await redis.pubsub()
+    pubsub = redis.pubsub()
     await pubsub.subscribe("ace:events")
 
     try:
-        async for message in await pubsub.listen():
+        async for message in pubsub.listen():
             if message["type"] == "message":
                 data = json.loads(message["data"])
                 await websocket.send_json(data)

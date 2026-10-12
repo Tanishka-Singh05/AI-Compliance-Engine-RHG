@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
@@ -49,3 +50,18 @@ class AlertRouter:
                     "alert_channel_failed",
                     extra={"channel": type(channel).__name__, "error": str(e)},
                 )
+
+
+def build_alert_router() -> AlertRouter:
+    """An ``AlertRouter`` with the channels enabled by the environment.
+
+    Slack is registered only when ``SLACK_WEBHOOK_URL`` is set: instantiating
+    ``SlackChannel`` without one raises ``KeyError``, which would take a service
+    down at import time.
+    """
+    router = AlertRouter()
+    if os.environ.get("SLACK_WEBHOOK_URL"):
+        from ace.alerts.channels.slack import SlackChannel
+
+        router.register(SlackChannel())
+    return router

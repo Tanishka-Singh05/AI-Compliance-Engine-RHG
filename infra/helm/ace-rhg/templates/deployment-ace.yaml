@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ace-rhg.fullname" . }}-ace
+  labels:
+    {{- include "ace-rhg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ace
+spec:
+  replicas: {{ .Values.ace.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ace-rhg.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ace
+  template:
+    metadata:
+      labels:
+        {{- include "ace-rhg.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ace
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: ace
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["uvicorn", "ace.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: metrics
+              containerPort: {{ .Values.ace.metricsPort }}
+          env:
+            - name: OPA_URL
+              value: {{ include "ace-rhg.opaUrl" . | quote }}
+            - name: REDIS_URL
+              value: {{ include "ace-rhg.redisUrl" . | quote }}
+            - name: ACE_METRICS_PORT
+              value: {{ .Values.ace.metricsPort | quote }}
+            - name: ACE_METRICS_ENABLED
+              value: "true"
+            {{- range $k, $v := .Values.ace.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "ace-rhg.secretName" . }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.ace.resources | nindent 12 }}

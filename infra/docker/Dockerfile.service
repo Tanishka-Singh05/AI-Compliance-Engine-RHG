@@ -1,0 +1,34 @@
+# Combined ACE + RHG service image for Kubernetes / Helm.
+#
+# The repo-root Dockerfile targets AWS Lambda (ACE only, Mangum handler). This
+# image is the runtime for the Helm chart: it bundles the `ace` package, the
+# `rhg` package, the Rego policies, and the OPA binary so a single image can
+# serve both `uvicorn ace.main:app` and `uvicorn rhg.main:app`.
+#
+#   docker build -f infra/docker/Dockerfile.service -t ace-rhg:0.1.1 .
+
+FROM python:3.12-slim
+
+ARG OPA_VERSION=0.63.0
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -L -o /usr/local/bin/opa \
+      "https://openpolicyagent.org/downloads/v${OPA_VERSION}/opa_linux_amd64_static" && \
+    chmod +x /usr/local/bin/opa && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /var/task
+
+COPY services/ace/requirements.txt ace-requirements.txt
+COPY services/rhg/requirements.txt rhg-requirements.txt
+RUN pip install --no-cache-dir -r ace-requirements.txt -r rhg-requirements.txt
+
+COPY services/ace/ ace/
+COPY services/rhg/ rhg/
+COPY policies/ policies/
+
+ENV PYTHONPATH=/var/task
+
+EXPOSE 8000 8001 8181 9090 9091
+
+# Default to ACE; the RHG Deployment overrides `command` to run rhg.main:app.
+CMD ["uvicorn", "ace.main:app", "--host", "0.0.0.0", "--port", "8000"]

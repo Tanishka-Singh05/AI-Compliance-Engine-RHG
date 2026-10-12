@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from typing import Annotated
 
 import httpx
-from ace.alerts.router import AlertPayload, AlertRouter, AlertSeverity
+from ace.alerts.router import AlertPayload, AlertSeverity, build_alert_router
 from ace.metrics.prometheus import track_gate_decision
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ gate = GateEvaluator(
     max_mutation_retries=int(os.environ.get("MAX_MUTATION_RETRIES", "3")),
 )
 ACE_URL = os.environ.get("ACE_URL", "http://localhost:8000")
-alert_router = AlertRouter()
+alert_router = build_alert_router()
 
 
 def _dispatch_alert(background_tasks: BackgroundTasks, payload: AlertPayload) -> None:
@@ -351,7 +351,7 @@ async def submit(request: SubmitRequest, ace_client: Annotated[httpx.AsyncClient
 
     report_url = (
         f"{os.environ.get('DASHBOARD_URL', 'http://localhost:3000')}"
-        f"/report/{scan_data.get('scan_id', '')}"
+        "/d/ace-rhg-overview"
     )
 
     track_gate_decision(gate_result.decision.value, request.environment)

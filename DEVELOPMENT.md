@@ -1,7 +1,7 @@
 # ACE+RHG — Development Status Report
 
 > Generated from full codebase audit against the original DEVELOPMENT.md spec.
-> **Tests: 128/128 passing | Coverage: 94% | Last verified: 2026-07-25**
+> **Tests: 321 passing | Last verified: 2026-10-13**
 
 ---
 
@@ -141,6 +141,37 @@ to `complete()`, where it is actionable (`NebiusConfigurationError`).
 - Without `NEBIUS_API_KEY`, agentic runs fail closed to `BLOCK` rather than
   shipping unreviewed patches.
 
+### Phase 13 — HTTP Agent Endpoints + `ace agent` ✅
+
+| Component | Status | Notes |
+|---|---|---|
+| `services/ace/api/agent_routes.py` | ✅ Done | `POST /ace/agent` — drives the v3 loop and returns decision, findings, patched artifacts, audit trail, `report_url` |
+| `services/rhg/api/agentic_routes.py` | ✅ Done | `POST /rhg/agentic-submit` — proxies `/ace/agent`, then dispatches the `gate.decision` alert |
+| `cli/ace_compliance/agent_cli.py` | ✅ Done | `ace agent` with `--via [ace\|rhg]`, `--profile`, `--fail-on`, `--fail-on-escalation`, `--backend-path` |
+| `services/rhg/api/routes.py` | ✅ Done | Gate alert dispatch (`_dispatch_alert`) via `AlertRouter` |
+
+### Phase 14 — CI/CD Plugin Expansion ✅
+
+| Component | Status | Notes |
+|---|---|---|
+| `plugins/github-actions/` | ✅ Done | npm action (`package.json`, `src/index.js`, `src/lib.js`) + tests |
+| `plugins/gitlab/` | ✅ Done | `.gitlab/components/ace-gate.yml` CI component |
+| `plugins/jenkins/` | ✅ Done | `vars/aceGate.groovy` shared-library step |
+| `plugins/argocd/` | ✅ Done | `Application` + `PreSync` gate Job |
+
+### Phase 15 — Packaging, Docs & Deployment Polish ✅
+
+| Component | Status | Notes |
+|---|---|---|
+| `CLAUDE.md` | ✅ Done | Architecture reference |
+| `Makefile` | ✅ Done | install/test/lint/opa/build/up/down/helm targets |
+| `LICENSE` | ✅ Done | MIT |
+| `.pre-commit-config.yaml` | ✅ Done | ruff, yaml/json checks, OPA + ACE local hooks |
+| `requirements-dev.txt` | ✅ Done | Dev + service deps in one install |
+| `policies/custom/` | ✅ Done | Template bundle + docs (not wired into `POLICY_MAP`) |
+| `infra/helm/ace-rhg/` | ✅ Done | Helm chart (ACE, RHG, OPA, Redis, policies, secret, ingress) |
+| `infra/docker/Dockerfile.service` | ✅ Done | Combined ACE+RHG runtime image for Helm |
+
 ### Samples
 
 | File | Status |
@@ -168,24 +199,33 @@ to `complete()`, where it is actionable (`NebiusConfigurationError`).
 
 ## What's Missing vs. DEVELOPMENT.md Spec
 
-### Critical Gaps
+### Resolved since the previous audit
 
-| Item | Spec Location | Effect |
-|---|---|---|
-| **`CLAUDE.md`** | Referenced in README, DEVELOPMENT.md, CLI README | Missing system architecture reference |
-| **`DEVELOPMENT.md`** | Referenced everywhere as build guide | This file was provided by you but doesn't exist in-repo |
+| Item | Resolution |
+|---|---|
+| **`CLAUDE.md`** | Added — architecture & contributor reference |
+| **`Makefile`** | Added — `install`/`test`/`lint`/`test-opa`/`build`/`up`/`down`/`helm-*` |
+| **`.env.example`** | Added (full variable list) |
+| **`infra/helm/`** | Added — chart for ACE, RHG, OPA, Redis (+ policies/secret/ingress) |
+| **Grafana dashboards** | Added under `infra/observability/grafana/` (file-provisioned) |
+| **`policies/custom/`** | Added — template bundle + docs (not yet in `POLICY_MAP`) |
+| **`LICENSE`** | Added (MIT) |
+| **`requirements-dev.txt`** | Added |
+| **`.pre-commit-config.yaml`** | Added |
+| **GitLab / Jenkins integrations** | Added under `plugins/` |
+| **npm GitHub Action** | Added under `plugins/github-actions/` |
+| **RHG + Prometheus + Grafana in compose** | Added (`docker-compose.yml`) |
 
-### Moderate Gaps
+### Remaining gaps
 
 | Item | Spec Location | Notes |
 |---|---|---|
-| **React dashboard** (`services/dashboard/`) | Phase 5, README tree | No React app exists — WebSocket and metrics are server-ready but have no UI |
-| **`Makefile`** | Referenced in README for `make test`, `make build`, etc. | No Makefile — commands must be run manually |
-| **`.env.example`** | README quick start | Not present |
-| **`infra/helm/`** | README tree | Helm chart not started |
-| **`infra/grafana/dashboards/`** | README tree | No provisioned dashboards |
-| **`policies/custom/`** | README tree | Empty directory — placeholder only |
-| **`LICENSE`** | README footer | Referenced MIT license file missing |
+| **React dashboard** (`services/dashboard/`) | Phase 5, README tree | Deliberately out of scope for now — WebSocket and metrics are server-ready but have no UI |
+
+Other items deliberately not added: **PostgreSQL** and **Celery** have no
+consumer code (no ORM, no task queue), so adding services for them would be dead
+configuration. `DATABASE_URL` appears only as example data scanned by the
+backend extractor.
 
 ### Spec Deviations (Functional Differences)
 
@@ -205,11 +245,11 @@ to `complete()`, where it is actionable (`NebiusConfigurationError`).
 
 | Item | Notes |
 |---|---|
-| **`docker-compose.yml` includes only 3 services** | Missing: PostgreSQL, Celery, Grafana, RHG service |
-| **No pre-commit config** | Referenced in contributing guide |
-| **No `requirements-dev.txt`** | Referenced in contributing guide |
-| **npm package** | Referenced in README but not started |
-| **GitLab/Jenkins/ArgoCD integrations** | Referenced but only GitHub Actions exists |
+| **`docker-compose.yml`** | Now runs OPA, Redis, ACE, RHG, Prometheus, Grafana (Postgres/Celery intentionally omitted — no consumer code) |
+| **pre-commit config** | Added (`.pre-commit-config.yaml`) |
+| **`requirements-dev.txt`** | Added |
+| **npm package** | Added (`plugins/github-actions/`) |
+| **GitLab/Jenkins/ArgoCD integrations** | Added under `plugins/` |
 
 ---
 
@@ -217,38 +257,35 @@ to `complete()`, where it is actionable (`NebiusConfigurationError`).
 
 | Suite | Tests | Status |
 |---|---|---|
-| ACE Engine (parsers, scorer, OPA client, API, agents, graph, alerts, metrics, websocket, LLM) | 201 | ✅ All pass |
-| RHG Gate (evaluator, patch engine, helpers, API) | 40 | ✅ All pass |
-| CLI | 4 | ✅ All pass |
-| **Total** | **245** | **✅ 100%** |
+| ACE (parsers, scorer, OPA client, API, agents, graph, alerts, metrics, websocket, LLM, policies) | 243 | ✅ All pass |
+| RHG Gate (evaluator, patch engine, helpers, API, agentic proxy) | 49 | ✅ All pass |
+| CLI | 29 | ✅ All pass |
+| **Total** | **321** | **✅ 100%** |
 
 `opa test policies/` passes with no failures.
 
-**Coverage:** 94% across `services/ace/` (stale — not re-measured since Phase 12 landed)
+**Coverage:** re-measure with `make coverage` (not tracked in CI gate).
 
 ---
 
 ## Recommended Next Work
 
-### Priority 1 — Add CLAUDE.md + DEVELOPMENT.md to Repo
-- Create `CLAUDE.md` with system architecture and API contracts (provided by you as second doc)
-- Keep this `DEVELOPMENT.md` as the status report / build guide
+### Deferred / out of scope
 
-### Priority 3 — Create Terraform Policy Bundle
-- Create `policies/cis-terraform/main.rego` or make the POLICY_MAP point to a valid existing bundle
-- At minimum add deny/patch rules for S3 bucket public ACL, unencrypted EBS, etc.
+- **React dashboard** (`services/dashboard/`) — the only remaining spec item;
+  not targeted at this time.
 
-### Priority 4 — Infrastructure Polish
-- Fix `@app.on_event("startup")` deprecation → lifespan pattern
-- Generate `.env.example` from the env vars in docs
-- Add PostgreSQL + Grafana to docker-compose.yml
-- Create initial Grafana dashboard JSON
-- Add `LICENSE` (MIT)
+### Optional follow-ups
 
-### Priority 5 — Makefile
-- Add `Makefile` with: `test`, `lint`, `build`, `dev`, `clean` targets matching spec
+- Migrate `@app.on_event("startup")` to the lifespan pattern (a deprecation
+  warning surfaces in test output).
+- Wire the `policies/custom/` bundle into `POLICY_MAP` once real custom rules
+  exist.
+- Add a PostgreSQL/Celery persistence layer if scan history or async jobs are
+  ever needed.
+- Publish the Helm chart (chart-releaser) and the CLI to PyPI.
 
 ---
 
 *ACE+RHG v0.1 — Development Status*
-*245 tests passing, codebase substantially ahead of documented spec; Phases 11–12 landed*
+*321 tests passing; phases 1–15 landed. Only the React dashboard remains deferred.*
