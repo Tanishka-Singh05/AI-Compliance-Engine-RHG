@@ -6,9 +6,17 @@ from ace.alerts.router import AlertChannel, AlertPayload
 
 
 class SQSChannel(AlertChannel):
-    def __init__(self, queue_url: str | None = None, region: str = "ap-south-1"):
+    def __init__(
+        self,
+        queue_url: str | None = None,
+        region: str = "ap-south-1",
+        message_group_id: str | None = None,
+    ):
         self.queue_url = queue_url or os.environ["SQS_ALERT_QUEUE_URL"]
         self.region = region
+        self.message_group_id = (
+            message_group_id or os.environ.get("SQS_MESSAGE_GROUP_ID") or "ace-rhg"
+        )
         self._client = None
 
     @property
@@ -49,5 +57,12 @@ class SQSChannel(AlertChannel):
                     "DataType": "String",
                 },
             },
+            **self._fifo_kwargs(),
         )
         return True
+
+    def _fifo_kwargs(self) -> dict:
+        """FIFO queues require ``MessageGroupId``; standard queues reject it."""
+        if self.queue_url.endswith(".fifo"):
+            return {"MessageGroupId": self.message_group_id}
+        return {}

@@ -137,3 +137,33 @@ class TestSQSChannel:
         assert body["repo"] == "org/service"
         assert body["decision"] == "BLOCK"
         assert body["source"] == "ace-rhg"
+
+    def test_fifo_queue_sets_message_group_id(self):
+        captured = {}
+        channel = SQSChannel(
+            queue_url="https://sqs.ap-south-1.amazonaws.com/123/ace-alerts.fifo"
+        )
+        mock_client = MagicMock()
+        mock_client.send_message = MagicMock(
+            side_effect=lambda **kw: captured.update(kw)
+        )
+        channel._client = mock_client
+        import asyncio
+
+        asyncio.run(channel.send(SAMPLE_PAYLOAD))
+        assert captured["MessageGroupId"] == "ace-rhg"
+
+    def test_standard_queue_omits_message_group_id(self):
+        captured = {}
+        channel = SQSChannel(
+            queue_url="https://sqs.ap-south-1.amazonaws.com/123/ace-alerts"
+        )
+        mock_client = MagicMock()
+        mock_client.send_message = MagicMock(
+            side_effect=lambda **kw: captured.update(kw)
+        )
+        channel._client = mock_client
+        import asyncio
+
+        asyncio.run(channel.send(SAMPLE_PAYLOAD))
+        assert "MessageGroupId" not in captured
