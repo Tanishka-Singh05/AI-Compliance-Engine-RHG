@@ -1,13 +1,13 @@
 import asyncio
 import base64
 import json
-import os
 from pathlib import Path
 
 import click
 import httpx
 
-ACE_URL = os.environ.get("ACE_URL")
+from ace_compliance.config import EndpointError, resolve_ace_url
+
 SEVERITY_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
 
 
@@ -21,9 +21,16 @@ def cli():
 @click.option("--env", default="production", help="Target environment")
 @click.option("--output", type=click.Choice(["text", "json"]), default="text")
 @click.option("--fail-on", type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"]), default="HIGH")
-@click.option("--ace-url", envvar="ACE_URL", default="http://localhost:8000", help="ACE service URL (default: http://localhost:8000, or set ACE_URL env var)")
-def scan(paths, env, output, fail_on, ace_url):
+@click.option("--profile", type=click.Choice(["local", "cloud", "auto"]), default=None, envvar="ACE_PROFILE",
+              help="Deployment profile: local (localhost), cloud (ACE_URL), or auto (default)")
+@click.option("--ace-url", default=None, help="ACE service URL (overrides the profile)")
+def scan(paths, env, output, fail_on, profile, ace_url):
     """Scan one or more artifact files for compliance violations."""
+    try:
+        ace_url = resolve_ace_url(profile, ace_url)
+    except EndpointError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(2)
     if not paths:
         paths = ("." ,)
     asyncio.run(_scan(list(paths), env, output, fail_on, ace_url))
@@ -130,6 +137,11 @@ def _print_text_report(result: dict):
         click.echo(f"  [{click.style(sev, fg=color)}] {rule_id}  {artifact}")
         click.echo(f"       {msg}")
     click.echo("")
+
+
+from ace_compliance.agent_cli import agent  # noqa: E402
+
+cli.add_command(agent)
 
 
 if __name__ == "__main__":
