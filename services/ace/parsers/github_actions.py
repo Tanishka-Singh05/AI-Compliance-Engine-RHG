@@ -40,18 +40,22 @@ class GitHubActionsParser(BaseParser):
         raw = self._normalize_keys(yaml.safe_load(content) or {})
         on_value = raw.get("on", {})
         triggers = list(on_value.keys()) if isinstance(on_value, dict) else ([on_value] if isinstance(on_value, str) else [])
+        metadata = {
+            "triggers": triggers,
+            "top_level_perms": raw.get("permissions"),
+            "jobs": self._extract_jobs(raw),
+            "uses_actions": self._extract_action_refs(raw),
+            "env_keys": list((raw.get("env") or {}).keys()),
+            "has_pull_request_target": "pull_request_target" in on_value if isinstance(on_value, dict) else False,
+        }
+        # The scan route forwards normalized.raw to OPA, so the fields the Rego
+        # bundle reads (input.metadata.*) must live under raw["metadata"].
+        raw["metadata"] = metadata
         return NormalizedArtifact(
             artifact_type="github_actions",
             name=name,
             raw=raw,
-            metadata={
-                "triggers": triggers,
-                "top_level_perms": raw.get("permissions"),
-                "jobs": self._extract_jobs(raw),
-                "uses_actions": self._extract_action_refs(raw),
-                "env_keys": list((raw.get("env") or {}).keys()),
-                "has_pull_request_target": "pull_request_target" in on_value if isinstance(on_value, dict) else False,
-            }
+            metadata=metadata,
         )
 
     def _extract_jobs(self, raw: dict) -> list[dict]:

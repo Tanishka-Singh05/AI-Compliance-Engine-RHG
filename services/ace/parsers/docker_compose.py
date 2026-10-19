@@ -14,8 +14,9 @@ COMPOSE_FILENAMES = {
 
 class DockerComposeParser(BaseParser):
     def supports(self, filename: str) -> bool:
-        return filename in COMPOSE_FILENAMES or (
-            filename.startswith("docker-compose.") and filename.endswith((".yml", ".yaml"))
+        base = filename.rsplit("/", 1)[-1]
+        return base in COMPOSE_FILENAMES or (
+            base.startswith("docker-compose.") and base.endswith((".yml", ".yaml"))
         )
 
     def parse(self, content: str, name: str) -> NormalizedArtifact:
